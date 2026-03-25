@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
-import type { Role, UserSession } from "@secure-exam/shared";
+import type { Role, UserSession } from "../types/domain.js";
 import { config } from "../config.js";
 
 declare global {

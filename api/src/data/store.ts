@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Exam, MonitoringEvent, StudentStatus, ViolationSeverity, ViolationType } from "@secure-exam/shared";
+import type { Exam, MonitoringEvent, StudentStatus, ViolationSeverity, ViolationType } from "../types/domain.js";
 
 export interface User {
   id: string;

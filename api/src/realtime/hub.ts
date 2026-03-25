@@ -1,4 +1,4 @@
-import type { MonitoringEvent, Role } from "@secure-exam/shared";
+import type { MonitoringEvent, Role } from "../types/domain.js";
 import jwt from "jsonwebtoken";
 import type { Server as HttpServer } from "http";
 import { Server } from "socket.io";
