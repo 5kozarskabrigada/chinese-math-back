@@ -1,11 +1,11 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db, logEvent, logViolation, markPersistDirty } from "../data/store.js";
 import { broadcastMonitorEvent, broadcastStudentUpdate } from "../realtime/hub.js";
 
 export const studentRouter = Router();
 
-studentRouter.get("/me", (req, res) => {
+studentRouter.get("/me", (req: Request, res: Response) => {
   const session = req.session;
   if (!session) {
     res.status(401).json({ error: "Unauthenticated" });
@@ -21,7 +21,7 @@ studentRouter.get("/me", (req, res) => {
   res.json(student);
 });
 
-studentRouter.post("/verify-camera", (req, res) => {
+studentRouter.post("/verify-camera", (req: Request, res: Response) => {
   const student = db.students.find((current) => current.id === req.session?.userId);
   if (!student) {
     res.status(404).json({ error: "Student not found" });
@@ -34,7 +34,7 @@ studentRouter.post("/verify-camera", (req, res) => {
   res.json({ verified: true });
 });
 
-studentRouter.post("/link-phone", (req, res) => {
+studentRouter.post("/link-phone", (req: Request, res: Response) => {
   const student = db.students.find((current) => current.id === req.session?.userId);
   if (!student) {
     res.status(404).json({ error: "Student not found" });
@@ -47,7 +47,7 @@ studentRouter.post("/link-phone", (req, res) => {
   res.json({ linked: true, pairingCode: "246810" });
 });
 
-studentRouter.post("/join-exam", (req, res) => {
+studentRouter.post("/join-exam", (req: Request, res: Response) => {
   const schema = z.object({ code: z.string().length(6) });
   const parseResult = schema.safeParse(req.body);
 
@@ -97,7 +97,7 @@ studentRouter.post("/join-exam", (req, res) => {
   });
 });
 
-studentRouter.post("/monitor-event", (req, res) => {
+studentRouter.post("/monitor-event", (req: Request, res: Response) => {
   const schema = z.object({
     examId: z.string().min(1),
     type: z.enum([

@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { config } from "../config.js";
@@ -11,7 +11,7 @@ const loginSchema = z.object({
 
 export const authRouter = Router();
 
-authRouter.post("/login", (req, res) => {
+authRouter.post("/login", (req: Request, res: Response) => {
   const parseResult = loginSchema.safeParse(req.body);
 
   if (!parseResult.success) {

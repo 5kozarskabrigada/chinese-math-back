@@ -1,11 +1,11 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db, createWarning, generateExamCode, logViolation, markPersistDirty } from "../data/store.js";
 import { broadcastMonitorEvent, broadcastStudentUpdate, broadcastWarningCreated } from "../realtime/hub.js";
 
 export const adminRouter = Router();
 
-adminRouter.get("/dashboard", (_req, res) => {
+adminRouter.get("/dashboard", (_req: Request, res: Response) => {
   res.json({
     students: db.students.length,
     classrooms: db.classrooms.length,
@@ -15,11 +15,11 @@ adminRouter.get("/dashboard", (_req, res) => {
   });
 });
 
-adminRouter.get("/students", (_req, res) => {
+adminRouter.get("/students", (_req: Request, res: Response) => {
   res.json(db.students);
 });
 
-adminRouter.post("/students", (req, res) => {
+adminRouter.post("/students", (req: Request, res: Response) => {
   const studentSchema = z.object({
     id: z.string().min(1),
     name: z.string().min(1),
@@ -52,11 +52,11 @@ adminRouter.post("/students", (req, res) => {
   res.status(201).json({ created: true });
 });
 
-adminRouter.get("/classrooms", (_req, res) => {
+adminRouter.get("/classrooms", (_req: Request, res: Response) => {
   res.json(db.classrooms);
 });
 
-adminRouter.post("/classrooms", (req, res) => {
+adminRouter.post("/classrooms", (req: Request, res: Response) => {
   const classroomSchema = z.object({
     id: z.string().min(1),
     name: z.string().min(1)
@@ -73,11 +73,11 @@ adminRouter.post("/classrooms", (req, res) => {
   res.status(201).json({ created: true });
 });
 
-adminRouter.get("/exams", (_req, res) => {
+adminRouter.get("/exams", (_req: Request, res: Response) => {
   res.json(db.exams);
 });
 
-adminRouter.post("/exams", (req, res) => {
+adminRouter.post("/exams", (req: Request, res: Response) => {
   const examSchema = z.object({
     title: z.string().min(1),
     timeLimitMinutes: z.number().int().min(1),
@@ -102,7 +102,7 @@ adminRouter.post("/exams", (req, res) => {
   res.status(201).json({ created: true });
 });
 
-adminRouter.patch("/exams/:examId/activation", (req, res) => {
+adminRouter.patch("/exams/:examId/activation", (req: Request, res: Response) => {
   const activationSchema = z.object({ isActive: z.boolean() });
   const parseResult = activationSchema.safeParse(req.body);
 
@@ -122,11 +122,11 @@ adminRouter.patch("/exams/:examId/activation", (req, res) => {
   res.json({ updated: true, exam });
 });
 
-adminRouter.get("/logs", (_req, res) => {
+adminRouter.get("/logs", (_req: Request, res: Response) => {
   res.json(db.events);
 });
 
-adminRouter.post("/warnings", (req, res) => {
+adminRouter.post("/warnings", (req: Request, res: Response) => {
   const warningSchema = z.object({
     studentId: z.string().min(1),
     examId: z.string().min(1),
@@ -154,7 +154,7 @@ adminRouter.post("/warnings", (req, res) => {
   res.status(201).json(warning);
 });
 
-adminRouter.post("/terminate", (req, res) => {
+adminRouter.post("/terminate", (req: Request, res: Response) => {
   const terminateSchema = z.object({
     studentId: z.string().min(1),
     examId: z.string().min(1),
