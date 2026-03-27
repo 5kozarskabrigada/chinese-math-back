@@ -15,12 +15,12 @@ function generatePassword(): string {
   return password;
 }
 
-// Generate unique user ID
-function generateUserId(role: "admin" | "student"): string {
-  const prefix = role === "admin" ? "admin-" : "stu-";
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 6);
-  return `${prefix}${timestamp}${random}`;
+// Generate username from first and last name
+function generateUsername(firstName: string, lastName: string): string {
+  const cleanFirst = firstName.toLowerCase().trim().replace(/\s+/g, '');
+  const cleanLast = lastName.toLowerCase().trim().replace(/\s+/g, '');
+  const randomNum = Math.floor(1000 + Math.random() * 9000); // 4-digit number
+  return `${cleanFirst}.${cleanLast}${randomNum}`;
 }
 
 adminRouter.get("/dashboard", (_req: Request, res: Response) => {
@@ -49,13 +49,13 @@ adminRouter.post("/users", (req: Request, res: Response) => {
   }
 
   const { firstName, lastName, role, classroomId } = parseResult.data;
-  const userId = generateUserId(role);
+  const username = generateUsername(firstName, lastName);
   const password = generatePassword();
   const fullName = `${firstName} ${lastName}`;
 
   // Create user
   db.users.push({
-    id: userId,
+    id: username,
     name: fullName,
     password,
     role,
@@ -65,7 +65,7 @@ adminRouter.post("/users", (req: Request, res: Response) => {
   // If student, also add to students array
   if (role === "student") {
     db.students.push({
-      id: userId,
+      id: username,
       name: fullName,
       password,
       classroomId,
@@ -80,9 +80,9 @@ adminRouter.post("/users", (req: Request, res: Response) => {
   res.status(201).json({
     created: true,
     user: {
-      id: userId,
+      id: username,
       name: fullName,
-      username: userId,
+      username: username,
       password,
       role,
       classroomId
