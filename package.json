@@ -1,0 +1,17 @@
+{
+  "name": "secure-exam-platform",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w api & npm run dev -w web",
+    "dev:api": "npm run dev -w api",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build -ws",
+    "typecheck": "npm run typecheck -ws"
+  }
+}

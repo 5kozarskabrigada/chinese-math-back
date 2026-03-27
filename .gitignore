@@ -1,0 +1,21 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage
+*.log
+
+# Build outputs
+build
+.vite
+
+# Deployment / tooling
+.vercel
+.render
+
+# OS / editor
+Thumbs.db
+.idea
+.vscode/*.log
