@@ -5,6 +5,24 @@ import { broadcastMonitorEvent, broadcastStudentUpdate, broadcastWarningCreated 
 
 export const adminRouter = Router();
 
+// Password generation utility
+function generatePassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  let password = '';
+  for (let i = 0; i < 10; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
+// Generate unique user ID
+function generateUserId(role: "admin" | "student"): string {
+  const prefix = role === "admin" ? "admin-" : "stu-";
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 6);
+  return `${prefix}${timestamp}${random}`;
+}
+
 adminRouter.get("/dashboard", (_req: Request, res: Response) => {
   res.json({
     students: db.students.length,
@@ -14,6 +32,136 @@ adminRouter.get("/dashboard", (_req: Request, res: Response) => {
     terminated: db.students.filter((student) => student.status === "terminated").length
   });
 });
+
+// User Management Endpoints
+adminRouter.post("/users", (req: Request, res: Response) => {
+  const createUserSchema = z.object({
+    firstName: z.string().min(1),
+    lastName: z.string().min(1),
+    role: z.enum(["admin", "student"]),
+    classroomId: z.string().optional()
+  });
+
+  const parseResult = createUserSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: "Invalid user payload", details: parseResult.error });
+    return;
+  }
+
+  const { firstName, lastName, role, classroomId } = parseResult.data;
+  const userId = generateUserId(role);
+  const password = generatePassword();
+  const fullName = `${firstName} ${lastName}`;
+
+  // Create user
+  db.users.push({
+    id: userId,
+    name: fullName,
+    password,
+    role,
+    classroomId: role === "student" ? classroomId : undefined
+  });
+
+  // If student, also add to students array
+  if (role === "student") {
+    db.students.push({
+      id: userId,
+      name: fullName,
+      password,
+      classroomId,
+      cameraVerified: false,
+      phoneLinked: false,
+      status: "not_started"
+    });
+  }
+
+  markPersistDirty();
+
+  res.status(201).json({
+    created: true,
+    user: {
+      id: userId,
+      name: fullName,
+      username: userId,
+      password,
+      role,
+      classroomId
+    }
+  });
+});
+
+adminRouter.get("/users", (_req: Request, res: Response) => {
+  const users = db.users.map(user => ({
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    classroomId: user.classroomId
+  }));
+  res.json(users);
+});
+
+adminRouter.patch("/users/:userId/password", (req: Request, res: Response) => {
+  const passwordSchema = z.object({
+    newPassword: z.string().min(6).optional()
+  });
+
+  const parseResult = passwordSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: "Invalid password payload" });
+    return;
+  }
+
+  const user = db.users.find(u => u.id === req.params.userId);
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const newPassword = parseResult.data.newPassword || generatePassword();
+  user.password = newPassword;
+
+  // Update student password if it's a student
+  if (user.role === "student") {
+    const student = db.students.find(s => s.id === user.id);
+    if (student) {
+      student.password = newPassword;
+    }
+  }
+
+  markPersistDirty();
+
+  res.json({
+    updated: true,
+    userId: user.id,
+    newPassword
+  });
+});
+
+adminRouter.delete("/users/:userId", (req: Request, res: Response) => {
+  const userIndex = db.users.findIndex(u => u.id === req.params.userId);
+  if (userIndex === -1) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const user = db.users[userIndex];
+  
+  // Remove from users array
+  db.users.splice(userIndex, 1);
+
+  // If student, remove from students array
+  if (user.role === "student") {
+    const studentIndex = db.students.findIndex(s => s.id === user.id);
+    if (studentIndex !== -1) {
+      db.students.splice(studentIndex, 1);
+    }
+  }
+
+  markPersistDirty();
+
+  res.json({ deleted: true, userId: user.id });
+});
+
 
 adminRouter.get("/students", (_req: Request, res: Response) => {
   res.json(db.students);
