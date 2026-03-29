@@ -206,7 +206,6 @@ adminRouter.get("/classrooms", (_req: Request, res: Response) => {
 
 adminRouter.post("/classrooms", (req: Request, res: Response) => {
   const classroomSchema = z.object({
-    id: z.string().min(1),
     name: z.string().min(1)
   });
 
@@ -216,9 +215,48 @@ adminRouter.post("/classrooms", (req: Request, res: Response) => {
     return;
   }
 
-  db.classrooms.push(parseResult.data);
+  const newClassroom = {
+    id: `class-${Date.now()}`,
+    name: parseResult.data.name
+  };
+
+  db.classrooms.push(newClassroom);
   markPersistDirty();
-  res.status(201).json({ created: true });
+  res.status(201).json({ created: true, classroom: newClassroom });
+});
+
+adminRouter.patch("/classrooms/:classroomId", (req: Request, res: Response) => {
+  const classroomSchema = z.object({
+    name: z.string().min(1)
+  });
+
+  const parseResult = classroomSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: "Invalid classroom payload" });
+    return;
+  }
+
+  const classroom = db.classrooms.find(c => c.id === req.params.classroomId);
+  if (!classroom) {
+    res.status(404).json({ error: "Classroom not found" });
+    return;
+  }
+
+  classroom.name = parseResult.data.name;
+  markPersistDirty();
+  res.json({ updated: true, classroom });
+});
+
+adminRouter.delete("/classrooms/:classroomId", (req: Request, res: Response) => {
+  const classroomIndex = db.classrooms.findIndex(c => c.id === req.params.classroomId);
+  if (classroomIndex === -1) {
+    res.status(404).json({ error: "Classroom not found" });
+    return;
+  }
+
+  db.classrooms.splice(classroomIndex, 1);
+  markPersistDirty();
+  res.json({ deleted: true });
 });
 
 adminRouter.get("/exams", (_req: Request, res: Response) => {
