@@ -259,6 +259,96 @@ adminRouter.delete("/classrooms/:classroomId", (req: Request, res: Response) => 
   res.json({ deleted: true });
 });
 
+// Get classroom details with students
+adminRouter.get("/classrooms/:classroomId", (req: Request, res: Response) => {
+  const classroom = db.classrooms.find(c => c.id === req.params.classroomId);
+  if (!classroom) {
+    res.status(404).json({ error: "Classroom not found" });
+    return;
+  }
+
+  // Get all students in this classroom
+  const students = db.users.filter(u => u.role === "student" && u.classroomId === req.params.classroomId);
+  
+  res.json({
+    classroom,
+    students: students.map(s => ({
+      id: s.id,
+      name: s.name,
+      classroomId: s.classroomId
+    }))
+  });
+});
+
+// Add student to classroom
+adminRouter.post("/classrooms/:classroomId/students", (req: Request, res: Response) => {
+  const studentSchema = z.object({
+    studentId: z.string().min(1)
+  });
+
+  const parseResult = studentSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: "Invalid request payload" });
+    return;
+  }
+
+  const classroom = db.classrooms.find(c => c.id === req.params.classroomId);
+  if (!classroom) {
+    res.status(404).json({ error: "Classroom not found" });
+    return;
+  }
+
+  const student = db.users.find(u => u.id === parseResult.data.studentId && u.role === "student");
+  if (!student) {
+    res.status(404).json({ error: "Student not found" });
+    return;
+  }
+
+  // Update student's classroom
+  student.classroomId = req.params.classroomId;
+  
+  // Also update in students array if exists
+  const studentRecord = db.students.find(s => s.id === student.id);
+  if (studentRecord) {
+    studentRecord.classroomId = req.params.classroomId;
+  }
+
+  markPersistDirty();
+  res.json({ success: true, student: { id: student.id, name: student.name, classroomId: student.classroomId } });
+});
+
+// Remove student from classroom
+adminRouter.delete("/classrooms/:classroomId/students/:studentId", (req: Request, res: Response) => {
+  const classroom = db.classrooms.find(c => c.id === req.params.classroomId);
+  if (!classroom) {
+    res.status(404).json({ error: "Classroom not found" });
+    return;
+  }
+
+  const student = db.users.find(u => u.id === req.params.studentId && u.role === "student");
+  if (!student) {
+    res.status(404).json({ error: "Student not found" });
+    return;
+  }
+
+  if (student.classroomId !== req.params.classroomId) {
+    res.status(400).json({ error: "Student is not in this classroom" });
+    return;
+  }
+
+  // Remove student from classroom
+  student.classroomId = undefined;
+  
+  // Also update in students array if exists
+  const studentRecord = db.students.find(s => s.id === student.id);
+  if (studentRecord) {
+    studentRecord.classroomId = undefined;
+  }
+
+  markPersistDirty();
+  res.json({ success: true });
+});
+
 adminRouter.get("/exams", (_req: Request, res: Response) => {
   res.json(db.exams);
 });
