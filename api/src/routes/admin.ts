@@ -137,7 +137,7 @@ adminRouter.patch("/users/:userId/password", (req: Request, res: Response) => {
   });
 });
 
-adminRouter.delete("/users/:userId", (req: Request, res: Response) => {
+adminRouter.delete("/users/:userId", async (req: Request, res: Response) => {
   const userIndex = db.users.findIndex(u => u.id === req.params.userId);
   if (userIndex === -1) {
     res.status(404).json({ error: "User not found" });
@@ -154,6 +154,22 @@ adminRouter.delete("/users/:userId", (req: Request, res: Response) => {
     const studentIndex = db.students.findIndex(s => s.id === user.id);
     if (studentIndex !== -1) {
       db.students.splice(studentIndex, 1);
+    }
+  }
+
+  // Actually delete from Supabase if configured
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (supabaseUrl && supabaseServiceRoleKey) {
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+    
+    // Delete from users table
+    await supabase.from("users").delete().eq("id", user.id);
+    
+    // If student, delete from students table
+    if (user.role === "student") {
+      await supabase.from("students").delete().eq("id", user.id);
     }
   }
 
@@ -350,7 +366,10 @@ adminRouter.delete("/classrooms/:classroomId/students/:studentId", (req: Request
 });
 
 adminRouter.get("/exams", (_req: Request, res: Response) => {
-  res.json(db.exams);
+  // Filter out exams that are in the recycle bin
+  const deletedExamIds = new Set(db.deletedItems.filter(item => item.type === "exam").map(item => item.data.id));
+  const activeExams = db.exams.filter(exam => !deletedExamIds.has(exam.id));
+  res.json(activeExams);
 });
 
 adminRouter.post("/exams", (req: Request, res: Response) => {
@@ -396,6 +415,84 @@ adminRouter.patch("/exams/:examId/activation", (req: Request, res: Response) => 
   exam.isActive = parseResult.data.isActive;
   markPersistDirty();
   res.json({ updated: true, exam });
+});
+
+// Soft delete exam (move to recycle bin)
+adminRouter.delete("/exams/:examId", (req: Request, res: Response) => {
+  const examIndex = db.exams.findIndex(e => e.id === req.params.examId);
+  if (examIndex === -1) {
+    res.status(404).json({ error: "Exam not found" });
+    return;
+  }
+
+  const exam = db.exams[examIndex];
+  
+  // Move to recycle bin
+  const deletedItem = {
+    id: `deleted-${Date.now()}`,
+    type: "exam" as const,
+    data: exam,
+    deletedAt: new Date().toISOString(),
+    deletedBy: "admin" // TODO: Get from auth context
+  };
+  
+  db.deletedItems.push(deletedItem);
+  db.exams.splice(examIndex, 1);
+  
+  markPersistDirty();
+  res.json({ deleted: true, itemId: deletedItem.id });
+});
+
+// Recycle bin endpoints
+adminRouter.get("/recycle-bin", (_req: Request, res: Response) => {
+  res.json(db.deletedItems);
+});
+
+adminRouter.post("/recycle-bin/:itemId/restore", (req: Request, res: Response) => {
+  const itemIndex = db.deletedItems.findIndex(item => item.id === req.params.itemId);
+  if (itemIndex === -1) {
+    res.status(404).json({ error: "Item not found in recycle bin" });
+    return;
+  }
+
+  const deletedItem = db.deletedItems[itemIndex];
+  
+  // Restore item based on type
+  if (deletedItem.type === "exam") {
+    db.exams.push(deletedItem.data);
+  }
+  // Add more types as needed (questions, etc.)
+  
+  // Remove from recycle bin
+  db.deletedItems.splice(itemIndex, 1);
+  
+  markPersistDirty();
+  res.json({ restored: true, item: deletedItem.data });
+});
+
+adminRouter.delete("/recycle-bin/:itemId", async (req: Request, res: Response) => {
+  const itemIndex = db.deletedItems.findIndex(item => item.id === req.params.itemId);
+  if (itemIndex === -1) {
+    res.status(404).json({ error: "Item not found in recycle bin" });
+    return;
+  }
+
+  const deletedItem = db.deletedItems[itemIndex];
+  
+  // Remove from recycle bin (permanent delete)
+  db.deletedItems.splice(itemIndex, 1);
+  
+  // Delete from Supabase if configured
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (supabaseUrl && supabaseServiceRoleKey) {
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+    await supabase.from("deleted_items").delete().eq("id", deletedItem.id);
+  }
+  
+  markPersistDirty();
+  res.json({ deleted: true, permanently: true });
 });
 
 adminRouter.get("/logs", (_req: Request, res: Response) => {

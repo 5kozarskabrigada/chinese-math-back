@@ -34,6 +34,14 @@ export interface AdminWarning {
   acknowledged: boolean;
 }
 
+export interface DeletedItem {
+  id: string;
+  type: "exam" | "question";
+  data: any;
+  deletedAt: string;
+  deletedBy: string;
+}
+
 export const db = {
   users: [
     { id: "admin-1", name: "Main Proctor", password: "admin123", role: "admin" as const },
@@ -62,7 +70,8 @@ export const db = {
     }
   ] as Exam[],
   events: [] as MonitoringEvent[],
-  warnings: [] as AdminWarning[]
+  warnings: [] as AdminWarning[],
+  deletedItems: [] as DeletedItem[]
 };
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -152,6 +161,17 @@ function syncToSupabase(): void {
         })),
         { onConflict: "id" }
       );
+
+      await supabaseClient.from("deleted_items").upsert(
+        db.deletedItems.map((item) => ({
+          id: item.id,
+          type: item.type,
+          data: item.data,
+          deleted_at: item.deletedAt,
+          deleted_by: item.deletedBy
+        })),
+        { onConflict: "id" }
+      );
     })
     .catch((error: unknown) => {
       console.error("Supabase sync failed", error);
@@ -167,23 +187,25 @@ export async function initializePersistence(): Promise<void> {
     return;
   }
 
-  const [usersResult, studentsResult, classroomsResult, examsResult, eventsResult, warningsResult] = await Promise.all([
+  const [usersResult, studentsResult, classroomsResult, examsResult, eventsResult, warningsResult, deletedItemsResult] = await Promise.all([
     supabaseClient.from("users").select("id,name,password,role,classroom_id"),
     supabaseClient.from("students").select("id,name,password,classroom_id,camera_verified,phone_linked,status"),
     supabaseClient.from("classrooms").select("id,name"),
     supabaseClient.from("exams").select("id,title,code,is_active,time_limit_minutes,classroom_ids"),
     supabaseClient.from("events").select("id,student_id,exam_id,type,severity,timestamp,metadata").order("timestamp", { ascending: true }),
-    supabaseClient.from("warnings").select("id,student_id,exam_id,message,created_at,acknowledged").order("created_at", { ascending: true })
+    supabaseClient.from("warnings").select("id,student_id,exam_id,message,created_at,acknowledged").order("created_at", { ascending: true }),
+    supabaseClient.from("deleted_items").select("id,type,data,deleted_at,deleted_by").order("deleted_at", { ascending: false })
   ]);
 
-  if (usersResult.error || studentsResult.error || classroomsResult.error || examsResult.error || eventsResult.error || warningsResult.error) {
+  if (usersResult.error || studentsResult.error || classroomsResult.error || examsResult.error || eventsResult.error || warningsResult.error || deletedItemsResult.error) {
     console.error("Supabase hydrate failed", {
       users: usersResult.error,
       students: studentsResult.error,
       classrooms: classroomsResult.error,
       exams: examsResult.error,
       events: eventsResult.error,
-      warnings: warningsResult.error
+      warnings: warningsResult.error,
+      deletedItems: deletedItemsResult.error
     });
     return;
   }
@@ -248,6 +270,16 @@ export async function initializePersistence(): Promise<void> {
       message: String(warning.message),
       createdAt: String(warning.created_at),
       acknowledged: Boolean(warning.acknowledged)
+    }));
+  }
+
+  if (deletedItemsResult.data) {
+    db.deletedItems = deletedItemsResult.data.map((item) => ({
+      id: String(item.id),
+      type: item.type as "exam" | "question",
+      data: item.data,
+      deletedAt: String(item.deleted_at),
+      deletedBy: String(item.deleted_by)
     }));
   }
 
