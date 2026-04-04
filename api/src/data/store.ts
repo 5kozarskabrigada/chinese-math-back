@@ -63,7 +63,7 @@ export const db = {
     {
       id: "exam-1",
       title: "Mathematics – National Standardized Test",
-      code: "123456",
+      code: "M4TH2X",
       isActive: true,
       timeLimitMinutes: 120,
       classroomIds: ["class-1"]
@@ -287,7 +287,19 @@ export async function initializePersistence(): Promise<void> {
 }
 
 export function generateExamCode(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const digits = "23456789";
+  const all = `${letters}${digits}`;
+  const code = [
+    letters[Math.floor(Math.random() * letters.length)],
+    digits[Math.floor(Math.random() * digits.length)]
+  ];
+
+  while (code.length < 6) {
+    code.push(all[Math.floor(Math.random() * all.length)]);
+  }
+
+  return code.sort(() => Math.random() - 0.5).join("");
 }
 
 export function logEvent(input: {

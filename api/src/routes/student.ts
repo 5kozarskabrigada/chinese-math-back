@@ -48,11 +48,11 @@ studentRouter.post("/link-phone", (req: Request, res: Response) => {
 });
 
 studentRouter.post("/join-exam", (req: Request, res: Response) => {
-  const schema = z.object({ code: z.string().length(6) });
+  const schema = z.object({ code: z.string().trim().regex(/^[A-Za-z0-9]{6}$/) });
   const parseResult = schema.safeParse(req.body);
 
   if (!parseResult.success) {
-    res.status(400).json({ error: "Exam code must be 6 digits" });
+    res.status(400).json({ error: "Exam code must be 6 letters or numbers" });
     return;
   }
 
@@ -62,7 +62,8 @@ studentRouter.post("/join-exam", (req: Request, res: Response) => {
     return;
   }
 
-  const exam = db.exams.find((current) => current.code === parseResult.data.code);
+  const normalizedCode = parseResult.data.code.toUpperCase();
+  const exam = db.exams.find((current) => current.code.toUpperCase() === normalizedCode);
   if (!exam || !exam.isActive) {
     res.status(403).json({ error: "Exam is unavailable or inactive" });
     return;

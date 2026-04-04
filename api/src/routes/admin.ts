@@ -375,6 +375,7 @@ adminRouter.get("/exams", (_req: Request, res: Response) => {
 adminRouter.post("/exams", (req: Request, res: Response) => {
   const examSchema = z.object({
     title: z.string().min(1),
+    code: z.string().regex(/^[A-Z0-9]{6}$/).optional(),
     timeLimitMinutes: z.number().int().min(1),
     classroomIds: z.array(z.string()).optional()
   });
@@ -385,11 +386,13 @@ adminRouter.post("/exams", (req: Request, res: Response) => {
     return;
   }
 
+  const { code, ...examInput } = parseResult.data;
+
   db.exams.push({
     id: `exam-${db.exams.length + 1}`,
-    code: generateExamCode(),
+    code: code ?? generateExamCode(),
     isActive: false,
-    ...parseResult.data
+    ...examInput
   });
 
   markPersistDirty();
