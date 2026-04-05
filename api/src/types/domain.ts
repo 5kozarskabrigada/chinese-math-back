@@ -17,6 +17,19 @@ export type ViolationType =
   | "suspicious_inactivity"
   | "manual_flag";
 
+export type ExamViolationMode = "record" | "disqualify";
+
+export type ExamAudienceScope = "all_students" | "specific_classroom";
+
+export interface ExamQuestion {
+  id: string;
+  type: "multiple-choice";
+  content: string;
+  options: string[];
+  correctAnswer: string;
+  points: number;
+}
+
 export interface UserSession {
   userId: string;
   role: Role;
@@ -30,6 +43,9 @@ export interface Exam {
   isActive: boolean;
   timeLimitMinutes: number;
   classroomIds?: string[];
+  audienceScope?: ExamAudienceScope;
+  violationMode?: ExamViolationMode;
+  questions?: ExamQuestion[];
 }
 
 export interface MonitoringEvent {

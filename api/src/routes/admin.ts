@@ -372,14 +372,26 @@ adminRouter.get("/exams", (_req: Request, res: Response) => {
   res.json(activeExams);
 });
 
-adminRouter.post("/exams", (req: Request, res: Response) => {
-  const examSchema = z.object({
-    title: z.string().min(1),
-    code: z.string().regex(/^[A-Z0-9]{6}$/).optional(),
-    timeLimitMinutes: z.number().int().min(1),
-    classroomIds: z.array(z.string()).optional()
-  });
+const examQuestionSchema = z.object({
+  id: z.string().min(1),
+  type: z.literal("multiple-choice"),
+  content: z.string(),
+  options: z.array(z.string()).length(4),
+  correctAnswer: z.string(),
+  points: z.number().int().min(1)
+});
 
+const examSchema = z.object({
+  title: z.string().min(1),
+  code: z.string().regex(/^[A-Z0-9]{6}$/).optional(),
+  timeLimitMinutes: z.number().int().min(1),
+  classroomIds: z.array(z.string()).optional(),
+  audienceScope: z.enum(["all_students", "specific_classroom"]).optional(),
+  violationMode: z.enum(["record", "disqualify"]).optional(),
+  questions: z.array(examQuestionSchema).length(48).optional()
+});
+
+adminRouter.post("/exams", (req: Request, res: Response) => {
   const parseResult = examSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: "Invalid exam payload" });
@@ -392,6 +404,9 @@ adminRouter.post("/exams", (req: Request, res: Response) => {
     id: `exam-${db.exams.length + 1}`,
     code: code ?? generateExamCode(),
     isActive: false,
+    audienceScope: examInput.audienceScope ?? (examInput.classroomIds && examInput.classroomIds.length > 0 ? "specific_classroom" : "all_students"),
+    violationMode: examInput.violationMode ?? "record",
+    questions: examInput.questions ?? [],
     ...examInput
   });
 
@@ -400,7 +415,34 @@ adminRouter.post("/exams", (req: Request, res: Response) => {
   res.status(201).json({ created: true });
 });
 
-adminRouter.patch("/exams/:examId/activation", (req: Request, res: Response) => {
+adminRouter.patch("/exams/:examId", (req: Request, res: Response) => {
+  const parseResult = examSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: "Invalid exam payload" });
+    return;
+  }
+
+  const exam = db.exams.find((current) => current.id === req.params.examId);
+  if (!exam) {
+    res.status(404).json({ error: "Exam not found" });
+    return;
+  }
+
+  const { code, ...examInput } = parseResult.data;
+
+  Object.assign(exam, {
+    ...examInput,
+    code: code ?? exam.code,
+    audienceScope: examInput.audienceScope ?? (examInput.classroomIds && examInput.classroomIds.length > 0 ? "specific_classroom" : "all_students"),
+    violationMode: examInput.violationMode ?? exam.violationMode ?? "record",
+    questions: examInput.questions ?? exam.questions ?? []
+  });
+
+  markPersistDirty();
+  res.json({ updated: true, exam });
+});
+
+function updateExamActivation(req: Request, res: Response) {
   const activationSchema = z.object({ isActive: z.boolean() });
   const parseResult = activationSchema.safeParse(req.body);
 
@@ -418,7 +460,10 @@ adminRouter.patch("/exams/:examId/activation", (req: Request, res: Response) => 
   exam.isActive = parseResult.data.isActive;
   markPersistDirty();
   res.json({ updated: true, exam });
-});
+}
+
+adminRouter.patch("/exams/:examId/activation", updateExamActivation);
+adminRouter.patch("/exams/:examId/activate", updateExamActivation);
 
 // Soft delete exam (move to recycle bin)
 adminRouter.delete("/exams/:examId", (req: Request, res: Response) => {

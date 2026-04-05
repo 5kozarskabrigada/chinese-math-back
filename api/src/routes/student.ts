@@ -124,6 +124,12 @@ studentRouter.post("/monitor-event", (req: Request, res: Response) => {
     return;
   }
 
+  const exam = db.exams.find((current) => current.id === parseResult.data.examId);
+  if (!exam) {
+    res.status(404).json({ error: "Exam not found" });
+    return;
+  }
+
   const event = logViolation({
     studentId: student.id,
     examId: parseResult.data.examId,
@@ -132,8 +138,10 @@ studentRouter.post("/monitor-event", (req: Request, res: Response) => {
     metadata: parseResult.data.metadata
   });
 
-  if (parseResult.data.severity === "severe" && student.status === "in_progress") {
-    student.status = "flagged";
+  if (student.status === "in_progress") {
+    if (exam.violationMode === "disqualify") {
+      student.status = "terminated";
+    }
     markPersistDirty();
   }
 

@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Exam, MonitoringEvent, StudentStatus, ViolationSeverity, ViolationType } from "../types/domain.js";
+import type { Exam, ExamQuestion, MonitoringEvent, StudentStatus, ViolationSeverity, ViolationType } from "../types/domain.js";
 
 export interface User {
   id: string;
@@ -66,7 +66,10 @@ export const db = {
       code: "M4TH2X",
       isActive: true,
       timeLimitMinutes: 120,
-      classroomIds: ["class-1"]
+      classroomIds: ["class-1"],
+      audienceScope: "specific_classroom" as const,
+      violationMode: "record" as const,
+      questions: [] as ExamQuestion[]
     }
   ] as Exam[],
   events: [] as MonitoringEvent[],
@@ -83,6 +86,28 @@ let syncQueue: Promise<void> = Promise.resolve();
 
 function isSupabaseConfigured(): boolean {
   return !!supabaseClient;
+}
+
+function sanitizeExamQuestions(value: unknown): ExamQuestion[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((question, index) => {
+    const candidate = typeof question === "object" && question ? (question as Partial<ExamQuestion>) : {};
+    const options = Array.isArray(candidate.options)
+      ? candidate.options.map((option) => (typeof option === "string" ? option : ""))
+      : [];
+
+    return {
+      id: typeof candidate.id === "string" ? candidate.id : `q-${index + 1}`,
+      type: "multiple-choice",
+      content: typeof candidate.content === "string" ? candidate.content : "",
+      options: Array.from({ length: 4 }, (_, optionIndex) => options[optionIndex] ?? ""),
+      correctAnswer: typeof candidate.correctAnswer === "string" ? candidate.correctAnswer : "",
+      points: typeof candidate.points === "number" ? candidate.points : 1
+    };
+  });
 }
 
 export function isSupabaseEnabled(): boolean {
@@ -125,17 +150,34 @@ function syncToSupabase(): void {
         { onConflict: "id" }
       );
 
-      await supabaseClient.from("exams").upsert(
-        db.exams.map((exam) => ({
-          id: exam.id,
-          title: exam.title,
-          code: exam.code,
-          is_active: exam.isActive,
-          time_limit_minutes: exam.timeLimitMinutes,
-          classroom_ids: exam.classroomIds ?? []
-        })),
-        { onConflict: "id" }
-      );
+      try {
+        await supabaseClient.from("exams").upsert(
+          db.exams.map((exam) => ({
+            id: exam.id,
+            title: exam.title,
+            code: exam.code,
+            is_active: exam.isActive,
+            time_limit_minutes: exam.timeLimitMinutes,
+            classroom_ids: exam.classroomIds ?? [],
+            audience_scope: exam.audienceScope ?? "all_students",
+            violation_mode: exam.violationMode ?? "record",
+            questions: exam.questions ?? []
+          })),
+          { onConflict: "id" }
+        );
+      } catch {
+        await supabaseClient.from("exams").upsert(
+          db.exams.map((exam) => ({
+            id: exam.id,
+            title: exam.title,
+            code: exam.code,
+            is_active: exam.isActive,
+            time_limit_minutes: exam.timeLimitMinutes,
+            classroom_ids: exam.classroomIds ?? []
+          })),
+          { onConflict: "id" }
+        );
+      }
 
       await supabaseClient.from("events").upsert(
         db.events.map((event) => ({
@@ -187,11 +229,21 @@ export async function initializePersistence(): Promise<void> {
     return;
   }
 
-  const [usersResult, studentsResult, classroomsResult, examsResult, eventsResult, warningsResult, deletedItemsResult] = await Promise.all([
+  const examsResult = await supabaseClient
+    .from("exams")
+    .select("id,title,code,is_active,time_limit_minutes,classroom_ids,audience_scope,violation_mode,questions")
+    .then((result) => {
+      if (!result.error) {
+        return result;
+      }
+
+      return supabaseClient.from("exams").select("id,title,code,is_active,time_limit_minutes,classroom_ids");
+    });
+
+  const [usersResult, studentsResult, classroomsResult, eventsResult, warningsResult, deletedItemsResult] = await Promise.all([
     supabaseClient.from("users").select("id,name,password,role,classroom_id"),
     supabaseClient.from("students").select("id,name,password,classroom_id,camera_verified,phone_linked,status"),
     supabaseClient.from("classrooms").select("id,name"),
-    supabaseClient.from("exams").select("id,title,code,is_active,time_limit_minutes,classroom_ids"),
     supabaseClient.from("events").select("id,student_id,exam_id,type,severity,timestamp,metadata").order("timestamp", { ascending: true }),
     supabaseClient.from("warnings").select("id,student_id,exam_id,message,created_at,acknowledged").order("created_at", { ascending: true }),
     supabaseClient.from("deleted_items").select("id,type,data,deleted_at,deleted_by").order("deleted_at", { ascending: false })
@@ -241,12 +293,17 @@ export async function initializePersistence(): Promise<void> {
 
   if (examsResult.data && examsResult.data.length > 0) {
     db.exams = examsResult.data.map((exam) => ({
-      id: String(exam.id),
-      title: String(exam.title),
-      code: String(exam.code),
-      isActive: Boolean(exam.is_active),
-      timeLimitMinutes: Number(exam.time_limit_minutes),
-      classroomIds: Array.isArray(exam.classroom_ids) ? (exam.classroom_ids as string[]) : []
+      id: String((exam as Record<string, unknown>).id),
+      title: String((exam as Record<string, unknown>).title),
+      code: String((exam as Record<string, unknown>).code),
+      isActive: Boolean((exam as Record<string, unknown>).is_active),
+      timeLimitMinutes: Number((exam as Record<string, unknown>).time_limit_minutes),
+      classroomIds: Array.isArray((exam as Record<string, unknown>).classroom_ids)
+        ? ((exam as Record<string, unknown>).classroom_ids as string[])
+        : [],
+      audienceScope: (exam as Record<string, unknown>).audience_scope === "specific_classroom" ? "specific_classroom" : "all_students",
+      violationMode: (exam as Record<string, unknown>).violation_mode === "disqualify" ? "disqualify" : "record",
+      questions: sanitizeExamQuestions((exam as Record<string, unknown>).questions)
     }));
   }
 
