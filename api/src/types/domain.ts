@@ -21,11 +21,15 @@ export type ExamViolationMode = "record" | "disqualify";
 
 export type ExamAudienceScope = "all_students" | "specific_classroom";
 
+export type ExamQuestionAlignment = "left" | "center" | "right";
+
 export interface ExamQuestion {
   id: string;
   type: "multiple-choice";
   content: string;
+  contentAlignment: ExamQuestionAlignment;
   options: string[];
+  optionAlignments: ExamQuestionAlignment[];
   correctAnswer: string;
   points: number;
 }

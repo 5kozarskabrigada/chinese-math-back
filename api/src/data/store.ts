@@ -103,7 +103,15 @@ function sanitizeExamQuestions(value: unknown): ExamQuestion[] {
       id: typeof candidate.id === "string" ? candidate.id : `q-${index + 1}`,
       type: "multiple-choice",
       content: typeof candidate.content === "string" ? candidate.content : "",
+      contentAlignment: candidate.contentAlignment === "center" || candidate.contentAlignment === "right" ? candidate.contentAlignment : "left",
       options: Array.from({ length: 4 }, (_, optionIndex) => options[optionIndex] ?? ""),
+      optionAlignments: Array.from(
+        { length: 4 },
+        (_, optionIndex) =>
+          Array.isArray(candidate.optionAlignments) && (candidate.optionAlignments[optionIndex] === "center" || candidate.optionAlignments[optionIndex] === "right")
+            ? candidate.optionAlignments[optionIndex]
+            : "left"
+      ),
       correctAnswer: typeof candidate.correctAnswer === "string" ? candidate.correctAnswer : "",
       points: typeof candidate.points === "number" ? candidate.points : 1
     };

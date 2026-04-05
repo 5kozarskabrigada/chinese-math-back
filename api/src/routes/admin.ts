@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { db, createWarning, generateExamCode, logViolation, markPersistDirty } from "../data/store.js";
 import { broadcastMonitorEvent, broadcastStudentUpdate, broadcastWarningCreated } from "../realtime/hub.js";
+import type { ExamQuestion } from "../types/domain.js";
 
 export const adminRouter = Router();
 
@@ -376,7 +377,9 @@ const examQuestionSchema = z.object({
   id: z.string().min(1),
   type: z.literal("multiple-choice"),
   content: z.string(),
+  contentAlignment: z.enum(["left", "center", "right"]).optional(),
   options: z.array(z.string()).length(4),
+  optionAlignments: z.array(z.enum(["left", "center", "right"])).length(4).optional(),
   correctAnswer: z.string(),
   points: z.number().int().min(1)
 });
@@ -391,6 +394,25 @@ const examSchema = z.object({
   questions: z.array(examQuestionSchema).length(48).optional()
 });
 
+function normalizeExamQuestions(
+  questions: Array<z.infer<typeof examQuestionSchema>> | undefined
+): ExamQuestion[] {
+  if (!questions) {
+    return [];
+  }
+
+  return questions.map((question): ExamQuestion => ({
+    id: question.id,
+    type: question.type,
+    content: question.content,
+    contentAlignment: question.contentAlignment ?? "left",
+    options: question.options,
+    optionAlignments: Array.from({ length: 4 }, (_, index) => question.optionAlignments?.[index] ?? "left"),
+    correctAnswer: question.correctAnswer,
+    points: question.points
+  }));
+}
+
 adminRouter.post("/exams", (req: Request, res: Response) => {
   const parseResult = examSchema.safeParse(req.body);
   if (!parseResult.success) {
@@ -398,16 +420,16 @@ adminRouter.post("/exams", (req: Request, res: Response) => {
     return;
   }
 
-  const { code, ...examInput } = parseResult.data;
+  const { code, questions, ...examInput } = parseResult.data;
 
   db.exams.push({
     id: `exam-${db.exams.length + 1}`,
+    ...examInput,
     code: code ?? generateExamCode(),
     isActive: false,
     audienceScope: examInput.audienceScope ?? (examInput.classroomIds && examInput.classroomIds.length > 0 ? "specific_classroom" : "all_students"),
     violationMode: examInput.violationMode ?? "record",
-    questions: examInput.questions ?? [],
-    ...examInput
+    questions: normalizeExamQuestions(questions)
   });
 
   markPersistDirty();
@@ -428,14 +450,14 @@ adminRouter.patch("/exams/:examId", (req: Request, res: Response) => {
     return;
   }
 
-  const { code, ...examInput } = parseResult.data;
+  const { code, questions, ...examInput } = parseResult.data;
 
   Object.assign(exam, {
     ...examInput,
     code: code ?? exam.code,
     audienceScope: examInput.audienceScope ?? (examInput.classroomIds && examInput.classroomIds.length > 0 ? "specific_classroom" : "all_students"),
     violationMode: examInput.violationMode ?? exam.violationMode ?? "record",
-    questions: examInput.questions ?? exam.questions ?? []
+    questions: questions ? normalizeExamQuestions(questions) : exam.questions ?? []
   });
 
   markPersistDirty();
