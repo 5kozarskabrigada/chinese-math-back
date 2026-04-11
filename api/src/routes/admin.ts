@@ -422,7 +422,7 @@ adminRouter.post("/exams", (req: Request, res: Response) => {
 
   const { code, questions, ...examInput } = parseResult.data;
 
-  db.exams.push({
+  const exam = {
     id: `exam-${db.exams.length + 1}`,
     ...examInput,
     code: code ?? generateExamCode(),
@@ -430,11 +430,13 @@ adminRouter.post("/exams", (req: Request, res: Response) => {
     audienceScope: examInput.audienceScope ?? (examInput.classroomIds && examInput.classroomIds.length > 0 ? "specific_classroom" : "all_students"),
     violationMode: examInput.violationMode ?? "record",
     questions: normalizeExamQuestions(questions)
-  });
+  };
+
+  db.exams.push(exam);
 
   markPersistDirty();
 
-  res.status(201).json({ created: true });
+  res.status(201).json({ created: true, exam });
 });
 
 adminRouter.patch("/exams/:examId", (req: Request, res: Response) => {
